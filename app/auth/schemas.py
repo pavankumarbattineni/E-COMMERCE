@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
+from typing import Optional
 
 # schema for user creation
 
@@ -32,6 +33,67 @@ class UserResponse(BaseModel):
     full_name: str
     email: EmailStr
     is_admin: int
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+
+
+# schema for category creation
+
+class CategoryBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+
+class CategoryCreate(CategoryBase):
+    pass
+
+class CategoryUpdate(CategoryBase):
+    pass
+
+class CategoryResponse(CategoryBase):
+    id: int
+
+    model_config = {
+        "from_attributes": True
+    }
+
+    
+
+# schema for product creation
+
+
+# schema for product creation and response
+
+class ProductBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: int
+    stock: int
+    category_id: int
+    image_url: Optional[str] = None
+
+# schema for product creation
+class ProductCreate(ProductBase):
+    pass
+
+# schema for product update
+
+class ProductUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[int] = None
+    stock: Optional[int] = None
+    category_id: Optional[int] = None
+    image_url: Optional[str] = None
+
+# schema for product response
+
+class ProductResponse(ProductBase):
+    id: int
 
     model_config = {
         "from_attributes": True

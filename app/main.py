@@ -1,6 +1,10 @@
 
 from fastapi import FastAPI
-from app.auth import routes as auth_routes
+from app.auth.authenticate_router import router as auth_routes
+from app.auth.category_router import router as category_routes
+from app.auth.product_router import router as product_routes
+
+
 from app.database.session import Base, engine
 
 # Create all tables in the database (from models)
@@ -13,7 +17,13 @@ app = FastAPI()
 
 # Include the auth router with defined endpoints
 
-app.include_router(auth_routes.router)
+app.include_router(auth_routes)
+
+# Include the category management router with defined endpoints
+app.include_router(category_routes)
+
+# Include the product management router with defined endpoints
+app.include_router(product_routes)
 
 # Define a simple home route
 @app.get("/")
