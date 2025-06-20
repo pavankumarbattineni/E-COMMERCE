@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime
 
 # schema for user creation
 
@@ -98,3 +99,43 @@ class ProductResponse(ProductBase):
     model_config = {
         "from_attributes": True
     }
+
+
+
+
+
+
+# Order Item - nested in order create
+class OrderItemCreate(BaseModel):
+    product_id: int
+    quantity: int
+
+class OrderItemResponse(BaseModel):
+    id: int
+    product_id: int
+    quantity: int
+    price: int
+
+    model_config = {
+        "from_attributes": True
+    }
+
+# Create Order
+class OrderCreate(BaseModel):
+    items: List[OrderItemCreate]
+
+# Response for Order
+class OrderResponse(BaseModel):
+    id: int
+    user_id: int
+    total_amount: int
+    status: str
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+

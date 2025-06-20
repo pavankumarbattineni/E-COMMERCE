@@ -5,15 +5,20 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.database.db import get_db
 from app.models.user import User
-from app.auth.schemas import TokenData
 from app.core.config import SECRET_KEY, ALGORITHM
-from app.core.security import pwd_context
+
 
 # HTTP bearer security scheme for token authentication
 security = HTTPBearer()
 
 # Generates JWT access token
 def create_access_token(data: dict, expires_delta: timedelta = None):
+
+    """Create a JWT access token with the provided data and expiration time.
+    If expires_delta is not provided, it defaults to 15 minutes.
+    The token includes the expiration time and the subject (user email) in its payload.
+    If an error occurs during token creation, it raises an HTTPException with a 500 status code."""
+    
     try:
         to_encode = data.copy()
         expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
@@ -41,11 +46,16 @@ async def get_current_user(
     token: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
+    
+    """Get the current user based on the provided JWT token.
+    This function decodes the JWT token, retrieves the user email from the payload,
+    and fetches the user from the database.
+    If the token is invalid or expired, it raises an HTTPException."""
     try:
         payload = jwt.decode(
             token.credentials,
             SECRET_KEY,
-            algorithms=[ALGORITHM],  # "verify_exp" is True by default in python-jose
+            algorithms=[ALGORITHM],  
         )
         email: str = payload.get("sub")
         if email is None:
@@ -68,5 +78,7 @@ def admin_required(current_user: User = Depends(get_current_user)):
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admins only")
     return current_user
+
+
 
 

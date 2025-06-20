@@ -77,3 +77,9 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Failed to retrieve user: {str(e)}")
 
 
+@router.post("/logout")
+async def logout(current_user: User = Depends(get_current_user)):
+    """
+    Logout current user. (Stateless - inform client to delete token)
+    """
+    return {"message": "Successfully logged out. Please delete the token on the client side."}

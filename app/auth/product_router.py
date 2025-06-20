@@ -4,7 +4,7 @@ from typing import List
 from app.database.db import get_db
 from app.models.user import Product
 from app.auth.schemas import ProductCreate, ProductUpdate, ProductResponse
-from app.auth.utils import admin_required, get_current_user
+from app.auth.utils import admin_required
 
 router = APIRouter(prefix="/products", tags=["Products"])
 

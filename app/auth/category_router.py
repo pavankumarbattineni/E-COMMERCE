@@ -9,6 +9,7 @@ from app.auth.utils import admin_required
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
 # Create a new category (Admin only)
+
 @router.post("/", response_model=CategoryResponse)
 async def create_category(
     category: CategoryCreate,
