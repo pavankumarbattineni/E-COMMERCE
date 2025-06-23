@@ -72,7 +72,7 @@ async def get_user_orders(
             .all()
         )
 
-        # ✅ Add product_name to each item
+        # Add product_name to each item
         for order in orders:
             for item in order.items:
                 item.product_name = item.product.name if item.product else "Unknown Product"
@@ -100,7 +100,7 @@ async def get_order_by_id(
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        # ✅ Add product_name to each item
+        #  Add product_name to each item
         for item in order.items:
             item.product_name = item.product.name if item.product else "Unknown Product"
 
@@ -152,7 +152,7 @@ async def update_order(
         db.commit()
         db.refresh(order)
 
-        # ✅ Add product_name dynamically
+        #  Add product_name dynamically
         for item in order.items:
             item.product_name = item.product.name if item.product else "Unknown Product"
 
