@@ -26,7 +26,6 @@ class Category(Base):
     image_url = Column(String, nullable=True, comment="URL of the category image")
 
 
-
 # product model definition
 
 class Product(Base):
