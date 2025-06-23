@@ -1,4 +1,3 @@
-# redesigned_ecommerce_app.py
 import streamlit as st
 import requests
 import os
@@ -10,16 +9,29 @@ API_URL = os.getenv("API_URL")
 
 st.set_page_config(page_title="🛒 E-Commerce App", layout="wide")
 
-# Session state setup
-if "access_token" not in st.session_state:
-    st.session_state.access_token = None
-if "user_info" not in st.session_state:
-    st.session_state.user_info = None
+# -------------------- Session State Setup --------------------
+defaults = {
+    "access_token": None,
+    "user_info": None,
+    "cart": [],
+    "menu_override": None,
+    "order_success": False,
+    "cat_name": "",
+    "cat_desc": "",
+    "cat_img": "",
+    "prod_name": "",
+    "prod_desc": "",
+    "prod_price": 0,
+    "prod_stock": 0,
+    "prod_img": "",
+}
+for key, val in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
+# -------------------- API Helpers --------------------
 def auth_header():
     return {"Authorization": f"Bearer {st.session_state.access_token}"}
-
-# API Utility Functions
 
 def register_user(full_name, email, password, is_admin):
     return requests.post(f"{API_URL}/auth/register", json={
@@ -57,22 +69,26 @@ def update_product(prod_id, data):
 def delete_product(prod_id):
     return requests.delete(f"{API_URL}/products/{prod_id}", headers=auth_header())
 
-# Auth Pages
+def place_order(data):
+    return requests.post(f"{API_URL}/orders/", json=data, headers=auth_header())
+
+def fetch_my_orders():
+    return requests.get(f"{API_URL}/orders/", headers=auth_header())
+
+# -------------------- Auth Flow --------------------
 if not st.session_state.access_token:
     auth_tab = st.sidebar.radio("Authentication", ["Login", "Register"])
-    
+
     if auth_tab == "Login":
         st.title("🔐 Login")
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_pwd")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
         if st.button("Login"):
             res = login_user(email, password)
             if res.status_code == 200:
-                token = res.json()["access_token"]
-                st.session_state.access_token = token
-                user = get_profile().json()
-                st.session_state.user_info = user
-                st.success("✅ Logged in successfully!")
+                st.session_state.access_token = res.json()["access_token"]
+                st.session_state.user_info = get_profile().json()
+                st.success("✅ Login successful!")
                 st.rerun()
             else:
                 st.error(res.json().get("detail"))
@@ -80,21 +96,25 @@ if not st.session_state.access_token:
     elif auth_tab == "Register":
         st.title("📝 Register")
         full_name = st.text_input("Full Name")
-        email = st.text_input("Email", key="reg_email")
-        password = st.text_input("Password", type="password", key="reg_pwd")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
         is_admin = st.checkbox("Register as Admin")
         if st.button("Register"):
             res = register_user(full_name, email, password, int(is_admin))
             if res.status_code == 200:
-                st.success("✅ Registered. Please login.")
+                st.success("✅ Registration successful. Please log in.")
             else:
                 st.error(res.json().get("detail"))
 
 else:
-    # Authenticated UI
     user = st.session_state.user_info
     st.sidebar.markdown(f"👤 Welcome, **{user['full_name']}**")
-    menu = st.sidebar.radio("Menu", ["Profile", "Categories", "Products", "Logout"])
+
+    menu = st.sidebar.radio("Menu", ["Profile", "Categories", "Products", "Cart", "My Orders", "Logout"])
+
+    if st.session_state.menu_override:
+        menu = st.session_state.menu_override
+        st.session_state.menu_override = None
 
     if menu == "Profile":
         st.title("👤 Profile")
@@ -103,158 +123,206 @@ else:
     elif menu == "Categories":
         st.title("📂 Categories")
         cat_res = fetch_categories()
-        if cat_res.status_code == 200:
-            categories = cat_res.json()
-        else:
-            st.error("Failed to load categories")
-            categories = []
-
+        categories = cat_res.json() if cat_res.status_code == 200 else []
         cat_tab = st.tabs(["View", "Add", "Update", "Delete"])
 
         with cat_tab[0]:
             st.subheader("📋 All Categories")
             for c in categories:
                 st.markdown(f"### {c['name']}")
-                st.write(c['description'])
+                st.write(c["description"])
                 if c.get("image_url"):
                     st.image(c["image_url"], width=300)
 
         if user["is_admin"]:
             with cat_tab[1]:
-                st.subheader("➕ Add Category")
-                name = st.text_input("Category Name")
-                desc = st.text_area("Description")
-                img = st.text_input("Image URL")
+                name = st.text_input("Category Name", value=st.session_state.cat_name, key="cat_name_input")
+                desc = st.text_area("Description", value=st.session_state.cat_desc, key="cat_desc_input")
+                img = st.text_input("Image URL", value=st.session_state.cat_img, key="cat_img_input")
                 if st.button("Create Category"):
                     res = create_category({"name": name, "description": desc, "image_url": img})
                     if res.status_code == 200:
-                        st.success("✅ Created")
+                        st.success("✅ Category created!")
+                        st.session_state.cat_name = ""
+                        st.session_state.cat_desc = ""
+                        st.session_state.cat_img = ""
+                        st.rerun()
                     else:
                         st.error(res.json().get("detail"))
 
             with cat_tab[2]:
-                st.subheader("✏️ Update Category")
                 cat_map = {f"{c['name']} (ID:{c['id']})": c for c in categories}
-                choice = st.selectbox("Select", list(cat_map.keys()))
+                choice = st.selectbox("Select", list(cat_map.keys()), key="cat_update_select")
                 cat = cat_map[choice]
-                new_name = st.text_input("Name", value=cat["name"])
-                new_desc = st.text_area("Description", value=cat["description"])
-                new_img = st.text_input("Image URL", value=cat["image_url"])
+                new_name = st.text_input("Name", value=cat["name"], key="cat_update_name")
+                new_desc = st.text_area("Description", value=cat["description"], key="cat_update_desc")
+                new_img = st.text_input("Image URL", value=cat["image_url"], key="cat_update_img")
                 if st.button("Update"):
                     res = update_category(cat["id"], {"name": new_name, "description": new_desc, "image_url": new_img})
                     if res.status_code == 200:
-                        st.success("✅ Updated")
+                        st.success("✅ Updated successfully")
+                        st.rerun()
+                    else:
+                        st.error(res.json().get("detail"))
 
             with cat_tab[3]:
-                st.subheader("🗑️ Delete Category")
-                del_choice = st.selectbox("Select", list(cat_map.keys()), key="delcat")
+                del_choice = st.selectbox("Select", list(cat_map.keys()), key="cat_delete_select")
                 del_id = cat_map[del_choice]["id"]
                 if st.button("Delete Category"):
                     res = delete_category(del_id)
-                    if res.status_code == 200:
-                        st.success("✅ Deleted")
+                    st.success("✅ Deleted" if res.status_code == 200 else res.json().get("detail"))
+                    st.rerun()
 
     elif menu == "Products":
         st.title("🛍️ Products")
-
-        # Fetch categories and products
-        cat_res = fetch_categories()
-        prod_res = fetch_products()
-        if cat_res.status_code == 200 and prod_res.status_code == 200:
-            categories = cat_res.json()
-            products = prod_res.json()
-        else:
-            st.error("Failed to load categories or products")
-            st.stop()
+        cat_res, prod_res = fetch_categories(), fetch_products()
+        categories = cat_res.json() if cat_res.status_code == 200 else []
+        products = prod_res.json() if prod_res.status_code == 200 else []
 
         prod_tab = st.tabs(["View", "Add", "Update", "Delete"])
 
-        # ----- View Products by Category -----
         with prod_tab[0]:
             st.subheader("📦 Products by Category")
-            if not categories:
-                st.warning("No categories found.")
-            else:
-                cat_map = {cat["name"]: cat["id"] for cat in categories}
-                selected_cat = st.selectbox("Select Category", list(cat_map.keys()), key="view_category")
-                selected_id = cat_map[selected_cat]
-                filtered = [p for p in products if p["category_id"] == selected_id]
+            cat_map = {c["name"]: c["id"] for c in categories}
+            selected_cat = st.selectbox("Select Category", list(cat_map.keys()), key="view_product_cat_select")
+            selected_id = cat_map[selected_cat]
+            filtered = [p for p in products if p["category_id"] == selected_id]
 
-                if not filtered:
-                    st.info("No products in this category.")
-                else:
-                    for p in filtered:
-                        st.markdown(f"### {p['name']} - ₹{p['price']}")
-                        st.write(p["description"])
-                        st.write(f"Stock: {p['stock']}")
-                        if p.get("image_url"):
-                            st.image(p["image_url"], width=300)
+            for i, p in enumerate(filtered):
+                st.markdown(f"### {p['name']} - ₹{p['price']}")
+                st.write(p["description"])
+                st.write(f"Stock: {p['stock']}")
+                if p.get("image_url"):
+                    st.image(p["image_url"], width=250)
+                qty = st.number_input(f"Qty for {p['name']}", min_value=1, max_value=p["stock"], value=1, key=f"qty_{i}")
+                if st.button(f"🛒 Add {p['name']} to Cart", key=f"add_{i}"):
+                    st.session_state.cart.append({
+                        "product_id": p["id"],
+                        "name": p["name"],
+                        "price": p["price"],
+                        "quantity": qty
+                    })
+                    st.success(f"{p['name']} added to cart!")
 
-        # ----- Admin: Add Product -----
         if user["is_admin"]:
             with prod_tab[1]:
-                st.subheader("➕ Add Product")
-                name = st.text_input("Product Name", key="add_name")
-                desc = st.text_area("Description", key="add_desc")
-                price = st.number_input("Price", min_value=0, key="add_price")
-                stock = st.number_input("Stock", min_value=0, key="add_stock")
-                cat_id = st.selectbox("Select Category", options=[c["id"] for c in categories], format_func=lambda x: next(c["name"] for c in categories if c["id"] == x), key="add_cat")
-                img = st.text_input("Image URL", key="add_img")
-
-                if st.button("Add Product", key="add_btn"):
+                name = st.text_input("Product Name", value=st.session_state.prod_name, key="prod_name_input")
+                desc = st.text_area("Description", value=st.session_state.prod_desc, key="prod_desc_input")
+                price = st.number_input("Price", min_value=0, value=st.session_state.prod_price, key="prod_price_input")
+                stock = st.number_input("Stock", min_value=0, value=st.session_state.prod_stock, key="prod_stock_input")
+                cat_id = st.selectbox("Select Category", [c["id"] for c in categories],
+                                      format_func=lambda x: next(c["name"] for c in categories if c["id"] == x),
+                                      key="add_product_cat_select")
+                img = st.text_input("Image URL", value=st.session_state.prod_img, key="prod_img_input")
+                if st.button("Add Product"):
                     res = create_product({
-                        "name": name,
-                        "description": desc,
-                        "price": price,
-                        "stock": stock,
-                        "category_id": cat_id,
-                        "image_url": img
+                        "name": name, "description": desc, "price": price,
+                        "stock": stock, "category_id": cat_id, "image_url": img
                     })
                     if res.status_code == 200:
-                        st.success("✅ Product added successfully!")
+                        st.success("✅ Product added!")
+                        st.session_state.prod_name = ""
+                        st.session_state.prod_desc = ""
+                        st.session_state.prod_price = 0
+                        st.session_state.prod_stock = 0
+                        st.session_state.prod_img = ""
+                        st.rerun()
+                    else:
+                        st.error(res.json().get("detail"))
 
-            # ----- Admin: Update Product -----
             with prod_tab[2]:
-                st.subheader("✏️ Update Product")
                 prod_map = {f"{p['name']} (ID:{p['id']})": p for p in products}
-                sel = st.selectbox("Select Product to Update", list(prod_map.keys()), key="upd_select")
+                sel = st.selectbox("Select Product", list(prod_map.keys()), key="update_product_select")
                 p = prod_map[sel]
-
-                name = st.text_input("Name", value=p["name"], key="upd_name")
-                desc = st.text_area("Description", value=p["description"], key="upd_desc")
-                price = st.number_input("Price", value=p["price"], key="upd_price")
-                stock = st.number_input("Stock", value=p["stock"], key="upd_stock")
-                cat_id = st.selectbox("Select Category", options=[c["id"] for c in categories], index=[c["id"] for c in categories].index(p["category_id"]), format_func=lambda x: next(c["name"] for c in categories if c["id"] == x), key="upd_cat")
-                img = st.text_input("Image URL", value=p["image_url"], key="upd_img")
-
-                if st.button("Update Product", key="upd_btn"):
+                name = st.text_input("Name", value=p["name"], key="update_name")
+                desc = st.text_area("Description", value=p["description"], key="update_desc")
+                price = st.number_input("Price", value=p["price"], key="update_price")
+                stock = st.number_input("Stock", value=p["stock"], key="update_stock")
+                cat_id = st.selectbox("Category", [c["id"] for c in categories],
+                                      index=[c["id"] for c in categories].index(p["category_id"]),
+                                      format_func=lambda x: next(c["name"] for c in categories if c["id"] == x),
+                                      key="update_product_cat_select")
+                img = st.text_input("Image URL", value=p["image_url"], key="update_img")
+                if st.button("Update Product"):
                     res = update_product(p["id"], {
-                        "name": name,
-                        "description": desc,
-                        "price": price,
-                        "stock": stock,
-                        "category_id": cat_id,
-                        "image_url": img
+                        "name": name, "description": desc, "price": price,
+                        "stock": stock, "category_id": cat_id, "image_url": img
                     })
                     if res.status_code == 200:
                         st.success("✅ Product updated!")
+                        st.rerun()
+                    else:
+                        st.error(res.json().get("detail"))
 
-            # ----- Admin: Delete Product -----
             with prod_tab[3]:
-                st.subheader("🗑️ Delete Product")
-                del_sel = st.selectbox("Select Product to Delete", list(prod_map.keys()), key="del_select")
+                del_sel = st.selectbox("Select Product", list(prod_map.keys()), key="delete_product_select")
                 prod_id = prod_map[del_sel]["id"]
-                if st.button("Delete Product", key="del_btn"):
+                if st.button("Delete Product"):
                     res = delete_product(prod_id)
-                    if res.status_code == 200:
-                        st.success("✅ Product deleted successfully!")
+                    st.success("✅ Deleted" if res.status_code == 200 else res.json().get("detail"))
+                    st.rerun()
 
-    
-    
-    
+    elif menu == "Cart":
+        st.title("🛒 Your Cart")
+        cart = st.session_state.cart
+
+        if st.session_state.order_success:
+            st.success("🎉 Order placed successfully!")
+            if st.button("🛍️ Continue Shopping"):
+                st.session_state.order_success = False
+                st.session_state.menu_override = "Products"
+                st.rerun()
+
+        if not cart:
+            st.info("Your cart is empty.")
+        else:
+            total = 0
+            for i, item in enumerate(cart):
+                col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+                with col1:
+                    st.write(f"**{item['name']}**")
+                with col2:
+                    qty = st.number_input("Qty", min_value=1, value=item['quantity'], key=f"qty_cart_{i}")
+                    item['quantity'] = qty
+                with col3:
+                    st.write(f"₹ {item['price']} × {item['quantity']} = ₹{item['price'] * item['quantity']}")
+                with col4:
+                    if st.button("❌ Remove", key=f"remove_{i}"):
+                        st.session_state.cart.pop(i)
+                        st.rerun()
+                total += item['price'] * item['quantity']
+
+            st.markdown(f"### 🧾 Total: ₹ {total}")
+            if st.button("✅ Place Order"):
+                order_payload = {
+                    "items": [{"product_id": item["product_id"], "quantity": item["quantity"]} for item in cart]
+                }
+                res = place_order(order_payload)
+                if res.status_code in (200, 201):
+                    st.session_state.cart = []
+                    st.session_state.order_success = True
+                    st.rerun()
+                else:
+                    st.error(res.json().get("detail", "Failed to place order."))
+
+    elif menu == "My Orders":
+        st.title("📦 My Orders")
+        res = fetch_my_orders()
+        if res.status_code == 200:
+            orders = res.json()
+            if not orders:
+                st.info("No orders placed yet.")
+            else:
+                for order in orders:
+                    with st.expander(f"Order #{order['id']} - ₹{order['total_amount']} - {order['status']}"):
+                        for item in order['items']:
+                            product_name = item.get("product_name", f"Product ID {item['product_id']}")
+                            st.markdown(f"- **{product_name}** × {item['quantity']} @ ₹{item['price']} each")
+        else:
+            st.error("❌ Failed to fetch orders.")
 
     elif menu == "Logout":
-        st.session_state.access_token = None
-        st.session_state.user_info = None
+        for key in defaults:
+            st.session_state[key] = defaults[key]
         st.success("✅ Logged out.")
         st.rerun()

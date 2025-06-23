@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload  # ✅ added joinedload
 from typing import List
 from app.database.db import get_db
 from app.auth.schemas import OrderCreate, OrderResponse
@@ -45,6 +45,11 @@ async def create_order(
 
         db.commit()
         db.refresh(new_order)
+
+        # ✅ Add product_name dynamically for each item
+        for item in new_order.items:
+            item.product_name = item.product.name if item.product else "Unknown Product"
+
         return new_order
 
     except Exception as e:
@@ -57,12 +62,22 @@ async def get_user_orders(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    
     """Fetch all orders for the current user.
         Returns a list of orders associated with the user."""
-    
     try:
-        return db.query(Order).filter(Order.user_id == current_user.id).all()
+        orders = (
+            db.query(Order)
+            .filter(Order.user_id == current_user.id)
+            .options(joinedload(Order.items).joinedload(OrderItem.product))  # ✅ Eager-load related products
+            .all()
+        )
+
+        # ✅ Add product_name to each item
+        for order in orders:
+            for item in order.items:
+                item.product_name = item.product.name if item.product else "Unknown Product"
+
+        return orders
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch orders: {str(e)}")
 
@@ -73,14 +88,22 @@ async def get_order_by_id(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    
     """Fetch a specific order by ID for the current user.
         Returns the order details if found, otherwise raises a 404 error."""
-
     try:
-        order = db.query(Order).filter(Order.id == order_id, Order.user_id == current_user.id).first()
+        order = (
+            db.query(Order)
+            .filter(Order.id == order_id, Order.user_id == current_user.id)
+            .options(joinedload(Order.items).joinedload(OrderItem.product))  # ✅ Eager-load products
+            .first()
+        )
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
+
+        # ✅ Add product_name to each item
+        for item in order.items:
+            item.product_name = item.product.name if item.product else "Unknown Product"
+
         return order
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch order: {str(e)}")
@@ -93,11 +116,9 @@ async def update_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    
     """Update an existing order for the current user.
         Validates product stock and updates the order items.
         If any product is out of stock, raises an HTTPException."""
-
     try:
         order = db.query(Order).filter(Order.id == order_id, Order.user_id == current_user.id).first()
         if not order:
@@ -130,6 +151,11 @@ async def update_order(
         order.total_amount = total_amount
         db.commit()
         db.refresh(order)
+
+        # ✅ Add product_name dynamically
+        for item in order.items:
+            item.product_name = item.product.name if item.product else "Unknown Product"
+
         return order
 
     except Exception as e:
@@ -143,10 +169,8 @@ async def delete_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    
     """Delete an order by ID for the current user.
         Restores stock for the products in the order and removes the order from the database."""
-    
     try:
         order = db.query(Order).filter(Order.id == order_id, Order.user_id == current_user.id).first()
         if not order:
@@ -166,4 +190,3 @@ async def delete_order(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete order: {str(e)}")
-

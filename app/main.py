@@ -4,17 +4,29 @@ from app.auth.authenticate_router import router as auth_routes
 from app.auth.category_router import router as category_routes
 from app.auth.product_router import router as product_routes
 from app.auth.order_router import router as order_routes
-
 from app.database.session import Base, engine
-
+from fastapi.middleware.cors import CORSMiddleware
+from app.middleware.middleware import RateLimitMiddleware
+from app.core.config import settings
 # Create all tables in the database (from models)
 
 Base.metadata.create_all(bind=engine)
 
 # Initialize FastAPI application
 
-app = FastAPI()
+app = FastAPI(title="E-Commerce API",
+              description="API for managing e-commerce operations including authentication, product management, and order processing.",
+              version="1.0.0")
 
+app.add_middleware(RateLimitMiddleware)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # Include the auth router with defined endpoints
 
 app.include_router(auth_routes)

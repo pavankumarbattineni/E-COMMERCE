@@ -6,7 +6,9 @@ from app.core.security import hash_password, verify_password
 from app.database.db import get_db
 from app.models.user import User
 from datetime import timedelta
-from app.core.config import ACCESS_TOKEN_EXPIRE_MINUTES
+from app.core.config import settings
+
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 
 
 # create a new router for authentication endpoints

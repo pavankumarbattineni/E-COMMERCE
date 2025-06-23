@@ -1,14 +1,19 @@
-
+from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 import os
-
-# Load environment variables from a .env file
+from typing import List
 
 load_dotenv()
 
-#read environment variables
+class Settings(BaseSettings):
+    allowed_origins: List[str]
+    access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
+    secret_key: str = os.getenv("SECRET_KEY")
+    algorithm: str = os.getenv("ALGORITHM")
+    database_url: str = os.getenv("DATABASE_URL")
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
+    @property
+    def origins(self) -> List[str]:
+        return self.allowed_origins
+
+settings = Settings()

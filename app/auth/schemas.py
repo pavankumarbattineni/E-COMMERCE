@@ -115,6 +115,7 @@ class OrderItemResponse(BaseModel):
     product_id: int
     quantity: int
     price: int
+    product_name : Optional[str] = None  # Added for dynamic product name
 
     model_config = {
         "from_attributes": True
@@ -132,6 +133,7 @@ class OrderResponse(BaseModel):
     status: str
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
+    items : List[OrderItemResponse]
 
     model_config = {
         "from_attributes": True
