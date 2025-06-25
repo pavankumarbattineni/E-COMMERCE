@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload  # ✅ added joinedload
+from sqlalchemy.orm import Session, joinedload  
 from typing import List
 from app.database.db import get_db
 from app.auth.schemas import OrderCreate, OrderResponse
@@ -46,7 +46,7 @@ async def create_order(
         db.commit()
         db.refresh(new_order)
 
-        # ✅ Add product_name dynamically for each item
+        # Add product_name dynamically for each item
         for item in new_order.items:
             item.product_name = item.product.name if item.product else "Unknown Product"
 
@@ -68,7 +68,7 @@ async def get_user_orders(
         orders = (
             db.query(Order)
             .filter(Order.user_id == current_user.id)
-            .options(joinedload(Order.items).joinedload(OrderItem.product))  # ✅ Eager-load related products
+            .options(joinedload(Order.items).joinedload(OrderItem.product))  # Eager-load related products
             .all()
         )
 
@@ -94,7 +94,7 @@ async def get_order_by_id(
         order = (
             db.query(Order)
             .filter(Order.id == order_id, Order.user_id == current_user.id)
-            .options(joinedload(Order.items).joinedload(OrderItem.product))  # ✅ Eager-load products
+            .options(joinedload(Order.items).joinedload(OrderItem.product))  # Eager-load products
             .first()
         )
         if not order:

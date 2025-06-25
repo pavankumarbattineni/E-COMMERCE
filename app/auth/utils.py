@@ -36,10 +36,9 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 
 # Get user by email from the database
 def get_user_by_email(db: Session, email: str):
-    try:
-        return db.query(User).filter(User.email == email).first()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching user: {str(e)}")
+    
+    return db.query(User).filter(User.email == email).first()
+    
 
 # Get the current user from the token
 from jose import jwt, JWTError, ExpiredSignatureError
