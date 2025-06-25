@@ -24,6 +24,8 @@ defaults = {
     "prod_price": 0,
     "prod_stock": 0,
     "prod_img": "",
+    "selected_category_id": None,
+    "auth_tab": "Login"
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -77,9 +79,7 @@ def fetch_my_orders():
 
 # -------------------- Auth Flow --------------------
 if not st.session_state.access_token:
-    auth_tab = st.sidebar.radio("Authentication", ["Login", "Register"])
-
-    if auth_tab == "Login":
+    if st.session_state.auth_tab == "Login":
         st.title("🔐 Login")
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
@@ -92,8 +92,7 @@ if not st.session_state.access_token:
                 st.rerun()
             else:
                 st.error(res.json().get("detail"))
-
-    elif auth_tab == "Register":
+    elif st.session_state.auth_tab == "Register":
         st.title("📝 Register")
         full_name = st.text_input("Full Name")
         email = st.text_input("Email")
@@ -103,8 +102,26 @@ if not st.session_state.access_token:
             res = register_user(full_name, email, password, int(is_admin))
             if res.status_code == 200:
                 st.success("✅ Registration successful. Please log in.")
+                st.session_state.auth_tab = "Login"
+                st.rerun()
             else:
-                st.error(res.json().get("detail"))
+                error_data = res.json()
+                if isinstance(error_data.get("detail"), list):
+                    for err in error_data["detail"]:
+                        field = err["loc"][-1]
+                        if field == "full_name":
+                            st.error("Please enter your full name (at least 3 characters).")
+                        elif field == "email":
+                            st.error("Please enter a valid email address (must contain '@').")
+                        elif field == "password":
+                            st.error("Password should be at least 8 characters long.")
+                        else:
+                            st.error(f"⚠️ {err['msg']}")
+                else:
+                    st.error(error_data.get("detail", "Something went wrong. Please try again."))
+
+
+    st.sidebar.radio("Authentication", ["Login", "Register"], index=["Login", "Register"].index(st.session_state.auth_tab), key="auth_tab_sidebar", on_change=lambda: st.session_state.update({"auth_tab": st.session_state.auth_tab_sidebar}))
 
 else:
     user = st.session_state.user_info
@@ -132,6 +149,10 @@ else:
                 st.markdown(f"### {c['name']}")
                 st.write(c["description"])
                 if c.get("image_url"):
+                    if st.button(f"View Products in {c['name']}", key=f"view_btn_{c['id']}"):
+                        st.session_state.selected_category_id = c["id"]
+                        st.session_state.menu_override = "Products"
+                        st.rerun()
                     st.image(c["image_url"], width=300)
 
         if user["is_admin"]:
@@ -174,7 +195,7 @@ else:
                     st.rerun()
 
     elif menu == "Products":
-        st.title("🛍️ Products")
+        st.title("Products")
         cat_res, prod_res = fetch_categories(), fetch_products()
         categories = cat_res.json() if cat_res.status_code == 200 else []
         products = prod_res.json() if prod_res.status_code == 200 else []
@@ -184,8 +205,13 @@ else:
         with prod_tab[0]:
             st.subheader("📦 Products by Category")
             cat_map = {c["name"]: c["id"] for c in categories}
-            selected_cat = st.selectbox("Select Category", list(cat_map.keys()), key="view_product_cat_select")
-            selected_id = cat_map[selected_cat]
+            if st.session_state.selected_category_id:
+                selected_id = st.session_state.selected_category_id
+                selected_cat = next((k for k, v in cat_map.items() if v == selected_id), None)
+            else:
+                selected_cat = st.selectbox("Select Category", list(cat_map.keys()), key="view_product_cat_select")
+                selected_id = cat_map[selected_cat]
+
             filtered = [p for p in products if p["category_id"] == selected_id]
 
             for i, p in enumerate(filtered):
@@ -203,6 +229,8 @@ else:
                         "quantity": qty
                     })
                     st.success(f"{p['name']} added to cart!")
+
+
 
         if user["is_admin"]:
             with prod_tab[1]:
